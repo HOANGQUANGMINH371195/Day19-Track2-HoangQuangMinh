@@ -22,6 +22,7 @@ Then in Python:
 """
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -71,6 +72,12 @@ query_velocity_source = FileSource(
     path=str(_DATA_DIR / "query_velocity.parquet"),
     timestamp_field="event_timestamp",
 )
+
+if os.getenv("FEAST_OFFLINE_STORE", "file") == "postgres":
+    from feast.infra.offline_stores.contrib.postgres_offline_store.postgres_source import PostgreSQLSource
+    user_profile_source = PostgreSQLSource(name="user_profile_source", table="user_profile", timestamp_field="event_timestamp")
+    item_popularity_source = PostgreSQLSource(name="item_popularity_source", table="item_popularity", timestamp_field="event_timestamp")
+    query_velocity_source = PostgreSQLSource(name="query_velocity_source", table="query_velocity", timestamp_field="event_timestamp")
 
 
 # ── Feature views ───────────────────────────────────────────────────────

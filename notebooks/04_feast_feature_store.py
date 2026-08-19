@@ -16,6 +16,7 @@
 
 # %%
 import _setup  # noqa: F401
+import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -72,6 +73,14 @@ def make_query_velocity(n_users: int = 100) -> pl.DataFrame:
 make_user_profile().write_parquet(FEAST_DATA / "user_profile.parquet")
 make_item_popularity().write_parquet(FEAST_DATA / "item_popularity.parquet")
 make_query_velocity().write_parquet(FEAST_DATA / "query_velocity.parquet")
+
+if os.getenv("FEAST_OFFLINE_STORE", "file") == "postgres":
+    from sqlalchemy import create_engine
+    _engine = create_engine("postgresql+psycopg://feast:feast@localhost:5432/feast_offline")
+    for _name, _frame in (("user_profile", make_user_profile()), ("item_popularity", make_item_popularity()), ("query_velocity", make_query_velocity())):
+        _frame.to_pandas().to_sql(_name, _engine, if_exists="replace", index=False)
+    _engine.dispose()
+    print("Loaded source tables into Postgres")
 print(f"Wrote 3 Parquet sources to {FEAST_DATA}")
 for p in sorted(FEAST_DATA.glob("*.parquet")):
     print(f"  {p.name}  {p.stat().st_size/1024:.1f} KB")
@@ -147,7 +156,7 @@ print(f"Single lookup: {single_latency_ms:.2f}ms")
 print({k: v[0] for k, v in features.items()})
 
 # %% [markdown]
-# ## 5. TODO — Batch latency benchmark (100 lookups, P99)
+# ## 5. Batch latency benchmark (100 lookups, P99)
 
 # %%
 latencies: list[float] = []
@@ -185,7 +194,7 @@ else:
 import pandas as pd
 entity_df = pd.DataFrame({
     "user_id": ["u_001", "u_002", "u_003"],
-    "event_timestamp": [NOW - timedelta(hours=2), NOW - timedelta(hours=1), NOW],
+    "event_timestamp": [NOW, NOW, NOW],
 })
 
 historical = fs.get_historical_features(

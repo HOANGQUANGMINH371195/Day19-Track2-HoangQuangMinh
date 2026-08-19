@@ -19,6 +19,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+if (_REPO_ROOT / ".env").exists():
+    for _line in (_REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _value = _line.split("=", 1)
+            os.environ.setdefault(_key.strip(), _value.split("#", 1)[0].strip())
+
 # Notebooks shell out to the `feast` CLI. Under `make lab` the venv is already
 # active, but under nbconvert / CI it is not, and the call dies with
 # FileNotFoundError: 'feast'. Put the running interpreter's bin dir on PATH so

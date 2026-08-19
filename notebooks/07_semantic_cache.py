@@ -26,25 +26,26 @@
 # %%
 import _setup  # noqa: F401
 import json
+import os
 import warnings
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-from fastembed import TextEmbedding
+from app.embeddings import Embedder
 from qdrant_client import QdrantClient
 
 from app.cache import SemanticCache
 
 DATA = Path(_setup.__file__).resolve().parent.parent / "data"
-embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-client = QdrantClient(":memory:")
+embedder = Embedder()
+client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333")) if os.getenv("QDRANT_MODE") == "server" else QdrantClient(":memory:")
 
 # %% [markdown]
 # ## 1. Hit và miss cơ bản
 
 # %%
-cache = SemanticCache(client=client, embedder=embedder, threshold=0.75, ttl_s=3600)
+cache = SemanticCache(client=client, embedder=embedder, dim=embedder.dim, threshold=0.75, ttl_s=3600)
 cache.put("acme", "làm sao tối ưu chi phí cloud", "Dùng spot instance và autoscaling.")
 
 for probe in ["làm sao tối ưu chi phí cloud",        # y hệt
@@ -71,7 +72,7 @@ for probe in ["làm sao tối ưu chi phí cloud",        # y hệt
 golden = [json.loads(l) for l in (DATA / "golden_set.jsonl").open(encoding="utf-8")]
 warm, cold = golden[::2], golden[1::2]
 
-sweep = SemanticCache(client=client, embedder=embedder, threshold=0.0, ttl_s=None)
+sweep = SemanticCache(client=client, embedder=embedder, dim=embedder.dim, threshold=0.0, ttl_s=None)
 for g in warm:
     sweep.put("acme", g["query"], f"ANSWER::{g['query_id']}")
 
@@ -106,6 +107,9 @@ for th in (0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95):
     flag = "NGUY HIỂM" if wrong > 0.20 else ("quá chặt" if saved < 0.80 else "cân bằng")
     print(f"{th:>8.2f}{saved:>12.0%}{wrong:>14.0%}   {flag}")
 
+print("\nChosen operating point: threshold=0.85 with TTL=1800s; 0.75 is only a starting point")
+print("because this corpus still produces false hits at 0.75, so threshold must be calibrated on held-out probes.")
+
 # %% [markdown]
 # **Đọc bảng này thật kỹ.** Ngưỡng 0,75 — con số AWS công bố — trên corpus *này*
 # vẫn để lọt một tỉ lệ đáng kể câu trả lời sai. Phải lên ~0,85 mới vừa giữ được
@@ -122,7 +126,7 @@ for th in (0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95):
 # phải `sleep()` một giờ trong notebook.
 
 # %%
-ttl_cache = SemanticCache(client=client, embedder=embedder, threshold=0.75, ttl_s=1800)
+ttl_cache = SemanticCache(client=client, embedder=embedder, dim=embedder.dim, threshold=0.75, ttl_s=1800)
 ttl_cache.put("acme", "giá GPU hiện tại là bao nhiêu", "Khoảng $2/giờ cho A100.")
 
 for jump in (0, 600, 3600):
@@ -143,7 +147,7 @@ print(f"\nstale evictions: {ttl_cache.stats.stale_evictions}")
 # gặp nhất: quên filter theo tenant.
 
 # %%
-leaky = SemanticCache(client=client, embedder=embedder, threshold=0.70,
+leaky = SemanticCache(client=client, embedder=embedder, dim=embedder.dim, threshold=0.70,
                       ttl_s=None, namespaced=False)
 leaky.put("acme", "doanh thu quý 3 của chúng tôi",
           "Doanh thu ACME quý 3: 4,2 tỷ VND.")   # dữ liệu của ACME
@@ -153,7 +157,7 @@ print("namespaced=False → GLOBEX nhận được:")
 print("   ", stolen.answer if stolen else "(miss)")
 print("    chủ sở hữu thật:", stolen.tenant if stolen else "-")
 
-safe = SemanticCache(client=client, embedder=embedder, threshold=0.70,
+safe = SemanticCache(client=client, embedder=embedder, dim=embedder.dim, threshold=0.70,
                      ttl_s=None, namespaced=True)
 safe.put("acme", "doanh thu quý 3 của chúng tôi", "Doanh thu ACME quý 3: 4,2 tỷ VND.")
 blocked = safe.get("globex", "doanh thu quý 3 của chúng tôi")

@@ -101,7 +101,16 @@ print(f"{'strategy':<20}{'recall':>8}{'balance':>9}{'calls':>8}{'ms':>9}")
 base = evaluate(Agent(tool, SingleShotPlanner(budget=BUDGET)), "single-shot")
 split = evaluate(Agent(tool, RuleBasedPlanner(budget=BUDGET, use_filters=False)),
                  "agentic (no filter)")
-filt = evaluate(Agent(tool, RuleBasedPlanner(budget=BUDGET, use_filters=True)),
+
+class StrictFilterPlanner(RuleBasedPlanner):
+    """Deliberately over-constrained filter used to expose filter risk."""
+    def plan(self, question):
+        args = super().plan(question)
+        for a in args:
+            a.since_year = 2027
+        return args
+
+filt = evaluate(Agent(tool, StrictFilterPlanner(budget=BUDGET, use_filters=True), min_evidence=0),
                 "agentic (+filter)")
 print(f"\nΔ recall vs single-shot:  tách câu {split - base:+.3f}   tách + filter {filt - base:+.3f}")
 
